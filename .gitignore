@@ -1,8 +1,8 @@
 /Debug
 /ICP
-.vcxproj
-.filters
-.sln
-.db
-.md
+*.vcxproj
+*.filters
+*.sln
+*.db
+*.md
 
