@@ -34,7 +34,7 @@ typedef struct Bins {
 //¶¨Òåº¯Êý
 void PointCenterOfMass(point_xyz_set *q, point_xyz_set *q_centermass);
 void FindClosePointViolent(point_xyz_set *p_base, point_xyz_set *q_new, int *closest_pt);
-void FindClosePointViaElias(Bins *q, point_xyz_set *qst, point_xyz_set *p_new, int *closest_pt);
+void FindClosePointViaElias(Bins *q, point_xyz_set *qst, point_xyz_set *p_new, int *closest_pt, double *meanDmax);
 void ICPalgorithm_myself(matrix *Translation, matrix *fR, vector *ft, point_xyz_set *p_base, point_xyz_set *q);
 
 //void ComputeRotationAndTranslation(void);

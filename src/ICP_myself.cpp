@@ -8,14 +8,19 @@ extern "C" {
 #include<math.h>
 #define num_p_t 5333
 #define debug 0
+double Dmax;
+#define MAX   99999999;
 //p_base  经过变换，对齐到q上去
 void ICPalgorithm_myself(matrix *Translation, matrix *fR, vector *ft, point_xyz_set *p_base, point_xyz_set *q)
 {
-
 	//初始化工作
 	//申请临时变量，用来保存迭代过程的p_base
 	point_xyz_set *p_new;
-	p_new = AllocatePoint_xyz_set(p_base->num);                                                   //未释放   
+	p_new = AllocatePoint_xyz_set(p_base->num);                                                   //未释放      已释放
+	
+	double previous_error = 99999,    /* error in the previous iteration */
+		delta_error;       /* current error - previous error */
+	
 	for (int i = 0; i < p_base->num; i++)
 	{
 		p_new->head[i].x = p_base->head[i].x;
@@ -25,7 +30,7 @@ void ICPalgorithm_myself(matrix *Translation, matrix *fR, vector *ft, point_xyz_
 
 	//申请数组，用来保存p_new每个点，在q中的最近点
 	int *closest_pt;
-	closest_pt = (int *)malloc(p_new->num * sizeof(int));
+	closest_pt = (int *)malloc(p_new->num * sizeof(int));                                      //未释放内存             已释放内存
 	//初始化数组
 	for (int i = 0; i < p_new->num; i++)
 	{
@@ -46,13 +51,26 @@ void ICPalgorithm_myself(matrix *Translation, matrix *fR, vector *ft, point_xyz_
 	q_bins = (Bins *)malloc(sizeof(Bins));                                                 //未释放内存   //已释放
 	PointCenterOfMass(q, q_centermass);
 	CreateBinsHashmap(q_bins, q_centermass);
-	
-	while (iteration_count < 30)
+
+
+	//meanDmax[0]  是平均误差
+	//meanDmax[1]   是搜索范围
+	double meanDmax[2];
+	meanDmax[0] = MAX;
+	meanDmax[1] = MAX;
+
+	/*修正ICP停止的条件
+	1. 超过迭代次数
+	2.总体平均误差小于规定误差                          mean_error > low_bound_mean_error
+	3. 步进误差小于规定的步进误差                       delta_error > low_bound_delta_error
+	*/
+	while (iteration_count < 10
+		)
 	{
 		printf("----------第%d次迭代---------------\n", iteration_count);
 
 		PointCenterOfMass(p_new, p_new_centermass);
-		FindClosePointViaElias(q_bins, q_centermass, p_new_centermass, closest_pt);
+		FindClosePointViaElias(q_bins, q_centermass, p_new_centermass, closest_pt, meanDmax);
 		ComputeRotationAndTranslation_SVD(q, p_new, closest_pt, fR, ft);
 		ApplyRotationAndTranslation(p_new, fR, ft);
 		iteration_count++;
@@ -104,7 +122,8 @@ void FindClosePointViolent(point_xyz_set *q, point_xyz_set *p_new, int *closest_
 		printf("%d-%d\n", i, minthispt);
 	}
 }
-void FindClosePointViaElias(Bins *q, point_xyz_set *qst, point_xyz_set *p_new, int *closest_pt)
+
+void FindClosePointViaElias(Bins *q, point_xyz_set *qst, point_xyz_set *p_new, int *closest_pt, double *meanDmax)
 {
 	//x_size, y_size, z_size, x_minboun, y_minboun, z_minboun
 	int num_p = p_new->num;
@@ -139,10 +158,14 @@ void FindClosePointViaElias(Bins *q, point_xyz_set *qst, point_xyz_set *p_new, i
 	double current_distance;
 	int min_distance_pt;
 	double min_distance;
+	double mean_error = 0;
 	int current_q = -1;
 	int start_i, end_i,       /* start and end of neighbor index */
 		start_j, end_j,
 		start_k, end_k;
+	int num_closest_pt = 0;
+	double *dist_pq;
+	dist_pq = (double *)malloc(p_new->num * sizeof(double));
 	for (int m = 0; m < num_p; m++)
 	{
 		/*printf("m   %f  %f  %f\n", qst->head[m].x, qst->head[m].y, qst->head[m].z);*/
@@ -172,7 +195,10 @@ void FindClosePointViaElias(Bins *q, point_xyz_set *qst, point_xyz_set *p_new, i
 			int search_radius = 1;
 
 			//保证搜索范围，在点云中
-			while (search_radius < q->numbineachdimen)
+			while (search_radius < q->numbineachdimen && 
+				   search_radius * binsize_x * 0.5 < Dmax  &&
+				   search_radius * binsize_y * 0.5 < Dmax  &&
+				   search_radius * binsize_z * 0.5 < Dmax)
 			{
 
 				start_i = (bin_i - search_radius < 0) ? 0 : bin_i - search_radius;
@@ -226,6 +252,9 @@ void FindClosePointViaElias(Bins *q, point_xyz_set *qst, point_xyz_set *p_new, i
 				if (min_distance_pt != -1)
 				{
 					closest_pt[m] = min_distance_pt;
+					mean_error += min_distance;
+					dist_pq[m] = min_distance;
+					num_closest_pt++;
 					//printf("%d-----%d \n ", m, min_distance_pt);
 					break;
 				}
@@ -237,11 +266,26 @@ void FindClosePointViaElias(Bins *q, point_xyz_set *qst, point_xyz_set *p_new, i
 			}
 
 
-			//printf("%d--hashmap--%d\n", m, closest_pt[m]);
+			printf("%d--hashmap--%d\n", m, closest_pt[m]);
 
 		}
 
 	}
+
+	mean_error /= (double)num_closest_pt;
+	double std_error = 0;
+	for (int i = 0; i < p_new->num; i++) 
+	{
+		if(closest_pt[i] != -1)
+		{
+		    std_error += (dist_pq[i] - mean_error) * (dist_pq[i] - mean_error);
+		}
+	}
+	std_error /= (double)num_closest_pt;
+	std_error = sqrt(std_error);
+	Dmax = 3.0*std_error + mean_error;
+	meanDmax[0] = mean_error;
+	meanDmax[1] = Dmax;
 
 }
 
