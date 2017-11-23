@@ -1,8 +1,7 @@
-/Debug
-/ICP
-*.vcxproj
-*.filters
-*.sln
-*.db
+/*
+!.gitignore
+!/src
+!*.md
+
 
 
