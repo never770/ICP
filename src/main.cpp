@@ -19,6 +19,7 @@ int main()
 	t = AllocateVector(3);
 	point_xyz_set *ps, *qs;
 
+	//交换一下
 	// 读取基准模型
 	int base_num;
 	base_num = coutrow("Points_Moving.txt");
@@ -27,6 +28,8 @@ int main()
 	//printf("-------------Points_Moving.txt----------\n");
 	//PrintPointXYZSet(ps);
 
+
+	
 	//读取变换后的点云
 	int change_num;
 	change_num = coutrow("Points_Static.txt");

@@ -19,7 +19,7 @@ void ICPalgorithm_myself(matrix *Translation, matrix *fR, vector *ft, point_xyz_
 	p_new = AllocatePoint_xyz_set(p_base->num);                                                   //未释放      已释放
 	
 	double previous_error = 99999,    /* error in the previous iteration */
-		delta_error;       /* current error - previous error */
+		delta_error = 99999;       /* current error - previous error */
 	
 	for (int i = 0; i < p_base->num; i++)
 	{
@@ -64,13 +64,24 @@ void ICPalgorithm_myself(matrix *Translation, matrix *fR, vector *ft, point_xyz_
 	2.总体平均误差小于规定误差                          mean_error > low_bound_mean_error
 	3. 步进误差小于规定的步进误差                       delta_error > low_bound_delta_error
 	*/
-	while (iteration_count < 10
+
+	double low_bound_mean_error = 0.0000000005;
+	double low_bound_delta_error = 0.000000002;
+	
+	while (iteration_count < 100 /*&&
+		(meanDmax[0] > low_bound_mean_error) &&
+		(delta_error > low_bound_delta_error)*/
 		)
 	{
 		printf("----------第%d次迭代---------------\n", iteration_count);
 
 		PointCenterOfMass(p_new, p_new_centermass);
 		FindClosePointViaElias(q_bins, q_centermass, p_new_centermass, closest_pt, meanDmax);
+
+		//添加新的控制变量
+		delta_error = fabs(meanDmax[0] - previous_error);
+		previous_error = meanDmax[0];
+
 		ComputeRotationAndTranslation_SVD(q, p_new, closest_pt, fR, ft);
 		ApplyRotationAndTranslation(p_new, fR, ft);
 		iteration_count++;
@@ -166,6 +177,8 @@ void FindClosePointViaElias(Bins *q, point_xyz_set *qst, point_xyz_set *p_new, i
 	int num_closest_pt = 0;
 	double *dist_pq;
 	dist_pq = (double *)malloc(p_new->num * sizeof(double));
+	Dmax = meanDmax[1];
+
 	for (int m = 0; m < num_p; m++)
 	{
 		/*printf("m   %f  %f  %f\n", qst->head[m].x, qst->head[m].y, qst->head[m].z);*/
@@ -196,9 +209,9 @@ void FindClosePointViaElias(Bins *q, point_xyz_set *qst, point_xyz_set *p_new, i
 
 			//保证搜索范围，在点云中
 			while (search_radius < q->numbineachdimen && 
-				   search_radius * binsize_x * 0.5 < Dmax  &&
-				   search_radius * binsize_y * 0.5 < Dmax  &&
-				   search_radius * binsize_z * 0.5 < Dmax)
+				   search_radius * binsize_x * 0.2 < Dmax  &&
+				   search_radius * binsize_y * 0.2 < Dmax  &&
+				   search_radius * binsize_z * 0.2 < Dmax)
 			{
 
 				start_i = (bin_i - search_radius < 0) ? 0 : bin_i - search_radius;
@@ -327,6 +340,10 @@ void ComputeRotationAndTranslation_SVD(point_xyz_set *q, point_xyz_set *p_new, i
 	//PrintPointXYZSet(q_close_pt);
 
 	rigid_transform3D(p_new_close_pt, q_close_pt, fR, trans_tmp);
+	printf("-------------------p_new_close_pt----------------\n");
+	PrintPointXYZSet(p_new_close_pt);
+	printf("-------------------q_close_pt----------------\n");
+	PrintPointXYZSet(q_close_pt);
 	for (int j = 0; j < 3; j++)
 	{
 		ft->entry[0] = trans_tmp->entry[0][0];
@@ -340,7 +357,7 @@ void ComputeRotationAndTranslation_SVD(point_xyz_set *q, point_xyz_set *p_new, i
 }
 void ApplyRotationAndTranslation(point_xyz_set *p_new, matrix *fR, vector *ft)
 {
-	if (false)
+	if (true)
 	{
 		printf("---------旋转矩阵-----------\n");
 		PrintMatrix(fR);
